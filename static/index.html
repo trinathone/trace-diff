@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>trace-diff — LLM Response Diff Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #ffffff;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: #8b949e;
+            font-size: 14px;
+        }
+
+        .input-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .input-column {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .input-label {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .input-label-text {
+            font-size: 13px;
+            font-weight: 500;
+            color: #c9d1d9;
+        }
+
+        input[type="text"] {
+            padding: 8px 12px;
+            background-color: #0d1117;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+        }
+
+        textarea {
+            padding: 12px;
+            background-color: #0d1117;
+            border: 2px solid #30363d;
+            color: #c9d1d9;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+            min-height: 200px;
+            line-height: 1.4;
+        }
+
+        textarea#leftInput {
+            border-color: #3fb950;
+        }
+
+        textarea#rightInput {
+            border-color: #8957e5;
+        }
+
+        textarea:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+        }
+
+        .button-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        #diffBtn {
+            flex: 1;
+            background-color: #1f6feb;
+            color: #ffffff;
+            padding: 12px 20px;
+            font-size: 15px;
+        }
+
+        #diffBtn:hover {
+            background-color: #388bfd;
+        }
+
+        #diffBtn:active {
+            background-color: #1154ba;
+        }
+
+        #loadExampleBtn {
+            background-color: #161b22;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+        }
+
+        #loadExampleBtn:hover {
+            background-color: #21262d;
+        }
+
+        .error-banner {
+            background-color: #da3633;
+            color: #ffffff;
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .error-banner.show {
+            display: block;
+        }
+
+        .summary-section {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .summary-section.show {
+            display: block;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .summary-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .summary-badge {
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-weight: 500;
+            font-size: 12px;
+        }
+
+        .badge-added {
+            background-color: rgba(63, 185, 80, 0.2);
+            color: #3fb950;
+        }
+
+        .badge-removed {
+            background-color: rgba(248, 81, 73, 0.2);
+            color: #f85149;
+        }
+
+        .badge-changed {
+            background-color: rgba(201, 209, 217, 0.2);
+            color: #d4a574;
+        }
+
+        .token-delta {
+            font-weight: 500;
+        }
+
+        .token-delta.positive {
+            color: #f85149;
+        }
+
+        .token-delta.negative {
+            color: #3fb950;
+        }
+
+        .finish-reason-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+
+        .finish-reason-changed {
+            color: #d4a574;
+            font-weight: 500;
+        }
+
+        .reasoning-indicator {
+            font-size: 13px;
+        }
+
+        .diff-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .diff-table.show {
+            display: table;
+        }
+
+        .diff-table thead {
+            background-color: #0d1117;
+        }
+
+        .diff-table th {
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: #8b949e;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .diff-table td {
+            padding: 10px 12px;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .diff-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .path-cell {
+            color: #8b949e;
+            white-space: nowrap;
+            max-width: 250px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .type-badge {
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-size: 11px;
+            font-weight: 600;
+            width: fit-content;
+        }
+
+        .type-added {
+            background-color: rgba(63, 185, 80, 0.2);
+            color: #3fb950;
+        }
+
+        .type-removed {
+            background-color: rgba(248, 81, 73, 0.2);
+            color: #f85149;
+        }
+
+        .type-changed {
+            background-color: rgba(217, 166, 30, 0.2);
+            color: #d4a574;
+        }
+
+        .value-cell {
+            color: #c9d1d9;
+            max-width: 300px;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+
+        .value-cell.added {
+            color: #3fb950;
+        }
+
+        .value-cell.removed {
+            color: #f85149;
+        }
+
+        .word-added {
+            background-color: rgba(63, 185, 80, 0.3);
+            padding: 1px 3px;
+            border-radius: 2px;
+            color: #3fb950;
+        }
+
+        .word-removed {
+            background-color: rgba(248, 81, 73, 0.3);
+            padding: 1px 3px;
+            border-radius: 2px;
+            color: #f85149;
+            text-decoration: line-through;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #8b949e;
+            font-size: 13px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .input-section {
+                grid-template-columns: 1fr;
+            }
+
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .value-cell {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>trace-diff</h1>
+            <p class="subtitle">LLM response diff tool — see exactly what changed</p>
+        </header>
+
+        <div class="error-banner" id="errorBanner"></div>
+
+        <div class="input-section">
+            <div class="input-column">
+                <div class="input-label">
+                    <label class="input-label-text">Response A Label</label>
+                    <input type="text" id="labelLeft" value="Response A" placeholder="gpt-4o">
+                </div>
+                <textarea id="leftInput" placeholder="Paste LLM API response (JSON)"></textarea>
+            </div>
+            <div class="input-column">
+                <div class="input-label">
+                    <label class="input-label-text">Response B Label</label>
+                    <input type="text" id="labelRight" value="Response B" placeholder="claude-sonnet-4-6">
+                </div>
+                <textarea id="rightInput" placeholder="Paste LLM API response (JSON)"></textarea>
+            </div>
+        </div>
+
+        <div class="button-section">
+            <button id="diffBtn">DIFF</button>
+            <button id="loadExampleBtn">Load Example</button>
+        </div>
+
+        <div class="loading" id="loading">Processing diff...</div>
+
+        <div class="summary-section" id="summarySection">
+            <div class="summary-grid" id="summaryGrid"></div>
+        </div>
+
+        <table class="diff-table" id="diffTable">
+            <thead>
+                <tr>
+                    <th style="width: 30%;">JSON Path</th>
+                    <th style="width: 10%;">Type</th>
+                    <th style="width: 30%;">Left Value</th>
+                    <th style="width: 30%;">Right Value</th>
+                </tr>
+            </thead>
+            <tbody id="diffTableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        function showError(message) {
+            const banner = document.getElementById('errorBanner');
+            banner.textContent = message;
+            banner.classList.add('show');
+            setTimeout(() => banner.classList.remove('show'), 5000);
+        }
+
+        function clearResults() {
+            document.getElementById('summarySection').classList.remove('show');
+            document.getElementById('diffTable').classList.remove('show');
+            document.getElementById('errorBanner').classList.remove('show');
+        }
+
+        function truncateValue(value, maxLength = 120) {
+            const str = typeof value === 'string' ? value : JSON.stringify(value);
+            if (str.length > maxLength) {
+                return str.substring(0, maxLength) + '...';
+            }
+            return str;
+        }
+
+        function renderWordDiff(path, wordDiffData, leftValue, rightValue) {
+            const container = document.createElement('div');
+
+            if (wordDiffData && wordDiffData.left_words && wordDiffData.right_words) {
+                const leftDiv = document.createElement('div');
+                leftDiv.style.marginBottom = '5px';
+                leftDiv.innerHTML = wordDiffData.left_words.map(word => {
+                    if (wordDiffData.removed.includes(word)) {
+                        return `<span class="word-removed">${escapeHtml(word)}</span>`;
+                    }
+                    return escapeHtml(word);
+                }).join(' ');
+
+                const rightDiv = document.createElement('div');
+                rightDiv.innerHTML = wordDiffData.right_words.map(word => {
+                    if (wordDiffData.added.includes(word)) {
+                        return `<span class="word-added">${escapeHtml(word)}</span>`;
+                    }
+                    return escapeHtml(word);
+                }).join(' ');
+
+                container.appendChild(leftDiv);
+                container.appendChild(document.createElement('hr'));
+                container.appendChild(rightDiv);
+                return container;
+            }
+            return null;
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        async function performDiff() {
+            clearResults();
+
+            const leftInput = document.getElementById('leftInput').value.trim();
+            const rightInput = document.getElementById('rightInput').value.trim();
+
+            if (!leftInput || !rightInput) {
+                showError('Please paste both responses before running diff');
+                return;
+            }
+
+            const loading = document.getElementById('loading');
+            loading.classList.add('show');
+
+            try {
+                const response = await fetch(`${API_BASE}/diff`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        left: leftInput,
+                        right: rightInput,
+                        label_left: document.getElementById('labelLeft').value || 'Response A',
+                        label_right: document.getElementById('labelRight').value || 'Response B'
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Diff failed');
+                }
+
+                const data = await response.json();
+                renderResults(data);
+            } catch (error) {
+                showError(`Error: ${error.message}`);
+            } finally {
+                loading.classList.remove('show');
+            }
+        }
+
+        function renderResults(data) {
+            const summary = data.summary;
+            const flatDiff = data.flat_diff;
+            const wordDiffs = data.word_diff || {};
+
+            // Render summary
+            const summaryGrid = document.getElementById('summaryGrid');
+            summaryGrid.innerHTML = '';
+
+            const addedItem = document.createElement('div');
+            addedItem.className = 'summary-item';
+            addedItem.innerHTML = `
+                <span class="summary-badge badge-added">🟢 Added</span>
+                <span>${summary.added_keys.length}</span>
+            `;
+            summaryGrid.appendChild(addedItem);
+
+            const removedItem = document.createElement('div');
+            removedItem.className = 'summary-item';
+            removedItem.innerHTML = `
+                <span class="summary-badge badge-removed">🔴 Removed</span>
+                <span>${summary.removed_keys.length}</span>
+            `;
+            summaryGrid.appendChild(removedItem);
+
+            const changedItem = document.createElement('div');
+            changedItem.className = 'summary-item';
+            changedItem.innerHTML = `
+                <span class="summary-badge badge-changed">🟡 Changed</span>
+                <span>${summary.changed_keys.length}</span>
+            `;
+            summaryGrid.appendChild(changedItem);
+
+            if (summary.token_delta.total !== null) {
+                const tokenItem = document.createElement('div');
+                tokenItem.className = 'summary-item';
+                const tokenValue = summary.token_delta.total;
+                const tokenClass = tokenValue > 0 ? 'positive' : 'negative';
+                const tokenSign = tokenValue > 0 ? '+' : '';
+                tokenItem.innerHTML = `
+                    <span>Tokens:</span>
+                    <span class="token-delta ${tokenClass}">${tokenSign}${tokenValue}</span>
+                `;
+                summaryGrid.appendChild(tokenItem);
+            }
+
+            if (summary.finish_reason_left || summary.finish_reason_right) {
+                const finishItem = document.createElement('div');
+                finishItem.className = 'summary-item';
+                const changed = summary.finish_reason_left !== summary.finish_reason_right;
+                const changeClass = changed ? 'finish-reason-changed' : '';
+                finishItem.innerHTML = `
+                    <span class="${changeClass}">Finish: ${summary.finish_reason_left} → ${summary.finish_reason_right}</span>
+                `;
+                summaryGrid.appendChild(finishItem);
+            }
+
+            const reasoningItem = document.createElement('div');
+            reasoningItem.className = 'summary-item reasoning-indicator';
+            const leftCheck = summary.reasoning_present_left ? '✓' : '✗';
+            const rightCheck = summary.reasoning_present_right ? '✓' : '✗';
+            const reasoningChanged = summary.reasoning_present_left !== summary.reasoning_present_right;
+            const reasoningClass = reasoningChanged ? 'finish-reason-changed' : '';
+            reasoningItem.innerHTML = `
+                <span>🧠 Reasoning:</span>
+                <span class="${reasoningClass}">${leftCheck} → ${rightCheck}</span>
+            `;
+            summaryGrid.appendChild(reasoningItem);
+
+            document.getElementById('summarySection').classList.add('show');
+
+            // Render diff table
+            const tbody = document.getElementById('diffTableBody');
+            tbody.innerHTML = '';
+
+            flatDiff.forEach(item => {
+                const row = document.createElement('tr');
+
+                const pathCell = document.createElement('td');
+                pathCell.className = 'path-cell';
+                pathCell.textContent = item.path;
+                row.appendChild(pathCell);
+
+                const typeCell = document.createElement('td');
+                const badge = document.createElement('span');
+                badge.className = `type-badge type-${item.type}`;
+                badge.textContent = item.type.toUpperCase();
+                typeCell.appendChild(badge);
+                row.appendChild(typeCell);
+
+                const leftCell = document.createElement('td');
+                leftCell.className = 'value-cell';
+                if (item.type === 'removed') {
+                    leftCell.classList.add('removed');
+                    leftCell.textContent = truncateValue(item.left);
+                } else if (item.type === 'added') {
+                    leftCell.textContent = '—';
+                } else {
+                    const wordDiffEl = renderWordDiff(item.path, wordDiffs[item.path], item.left, item.right);
+                    if (wordDiffEl) {
+                        leftCell.appendChild(wordDiffEl);
+                    } else {
+                        leftCell.textContent = truncateValue(item.left);
+                    }
+                }
+                row.appendChild(leftCell);
+
+                const rightCell = document.createElement('td');
+                rightCell.className = 'value-cell';
+                if (item.type === 'added') {
+                    rightCell.classList.add('added');
+                    rightCell.textContent = truncateValue(item.right);
+                } else if (item.type === 'removed') {
+                    rightCell.textContent = '—';
+                } else {
+                    rightCell.textContent = truncateValue(item.right);
+                }
+                row.appendChild(rightCell);
+
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('diffTable').classList.add('show');
+        }
+
+        function loadExample() {
+            const left = {
+                "id": "chatcmpl-abc",
+                "object": "chat.completion",
+                "model": "gpt-4o",
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "The answer is 42.",
+                        "tool_calls": null
+                    },
+                    "finish_reason": "stop"
+                }],
+                "usage": {
+                    "prompt_tokens": 15,
+                    "completion_tokens": 8,
+                    "total_tokens": 23
+                }
+            };
+
+            const right = {
+                "id": "chatcmpl-xyz",
+                "object": "chat.completion",
+                "model": "deepseek-reasoner",
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "The answer is 42, because it is the ultimate answer.",
+                        "reasoning_content": "Let me think about this carefully. The question asks for the answer to life, universe, and everything. According to Hitchhiker's Guide, it is 42."
+                    },
+                    "finish_reason": "stop"
+                }],
+                "usage": {
+                    "prompt_tokens": 15,
+                    "completion_tokens": 48,
+                    "total_tokens": 63
+                }
+            };
+
+            document.getElementById('leftInput').value = JSON.stringify(left, null, 2);
+            document.getElementById('rightInput').value = JSON.stringify(right, null, 2);
+            document.getElementById('labelLeft').value = 'gpt-4o';
+            document.getElementById('labelRight').value = 'deepseek-reasoner';
+        }
+
+        // Event listeners
+        document.getElementById('diffBtn').addEventListener('click', performDiff);
+        document.getElementById('loadExampleBtn').addEventListener('click', loadExample);
+
+        document.getElementById('leftInput').addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') performDiff();
+        });
+        document.getElementById('rightInput').addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') performDiff();
+        });
+    </script>
+</body>
+</html>
