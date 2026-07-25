@@ -1,3 +1,15 @@
+<div align="center">
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=180&section=header&text=TRACE-DIFF&fontSize=42&fontColor=fff&animation=twinkling&fontAlignY=32&desc=Swap%20models%2C%20compare%20API%20responses%20side-by-side&descAlignY=55&descSize=16"/>
+
+[![Live Demo](https://img.shields.io/badge/▶_Live_Demo-Visit_Now-6366f1?style=for-the-badge&logoColor=white)](https://trace-diff.vercel.app)
+[![GitHub Stars](https://img.shields.io/github/stars/trinathone/trace-diff?style=for-the-badge&color=f59e0b)](https://github.com/trinathone/trace-diff)
+[![License](https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge)](LICENSE)
+
+</div>
+
+---
+
 # trace-diff
 
 Ever upgraded a model — say, swapped GPT-4 for Claude Sonnet — and then spent 30 minutes trying to figure out *exactly* what changed in the raw response? Did `reasoning_content` disappear? Did `finish_reason` go from `stop` to `end_turn`? Did your app break because token count format shifted?
